@@ -1,18 +1,43 @@
-export type Ingredient={name:string;qty:number;unit:string;price:number;category:string;vegetable?:boolean};
-export type Recipe={id:string;name:string;description:string;type:string;months:number[];minutes:number;servings:number;utensils:string;ingredients:Ingredient[];steps:string;favorite:boolean;color:string;emoji:string;source?:string};
-export type Plan={id:string;date:string;recipeId:string;servings:number};
-export type Receipt={id:string;date:string;store:string;total:number;file?:{key:string;name:string};lines:{name:string;qty:number;unit:string;total:number}[];notes:string};
-export type Data={recipes:Recipe[];plans:Plan[];receipts:Receipt[];checked:Record<string,boolean>;extras:{id:string;name:string;qty:number;unit:string;price:number}[];budget:number;prices:Record<string,{price:number;date:string}>};
+export type Ingredient={id?:string;name:string;brand?:string;qty:number;unit:string;price:number;category:string;vegetable?:boolean};
+export type Recipe={id:string;name:string;description:string;type:string;months:number[];minutes:number;cookingMinutes?:number;servings:number;utensils:string;ingredients:Ingredient[];steps:string;favorite:boolean;color:string;emoji:string;source?:string};
+export type Meal='breakfast'|'lunch'|'dinner';
+export const MEALS:{value:Meal;label:string}[]=[{value:'breakfast',label:'Petit déjeuner'},{value:'lunch',label:'Déjeuner'},{value:'dinner',label:'Dîner'}];
+export const UNITS=['g','ml','pièce','càc','càs'];
+export type Plan={id:string;date:string;recipeId:string;servings:number;meal?:Meal;ingredientIds?:string[]};
+export type ReceiptLine={name:string;brand?:string;qty:number;unit:string;total:number};
+export type Receipt={id:string;date:string;store:string;total:number;file?:{key:string;name:string};lines:ReceiptLine[];notes:string};
+export type Food={id:string;name:string;brand?:string;unit:string;category:string};
+export type PriceEntry={id:string;name:string;brand?:string;unit:string;price:number;date:string;source:'manual'|'receipt'|'legacy';receiptId?:string;recordedAt?:string};
+export type Data={recipes:Recipe[];plans:Plan[];receipts:Receipt[];checked:Record<string,boolean>;extras:{id:string;name:string;qty:number;unit:string;price:number}[];budget:number;prices:Record<string,{price:number;date:string}>;priceHistory:PriceEntry[];foods:Food[]};
 export const MONTHS=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 export const money=(n:number)=>new Intl.NumberFormat('fr-BE',{style:'currency',currency:'EUR'}).format(n);
-export const key=(name:string,unit:string)=>name.trim().toLocaleLowerCase('fr')+'|'+unit;
+const normalized=(s:string)=>s.trim().toLocaleLowerCase('fr');
+export const unitFactor=(unit:string)=>unit==='càc'?5:unit==='càs'?15:1;
+export const baseUnit=(unit:string)=>unit==='càc'||unit==='càs'?'ml':unit;
+export const priceScale=(unit:string)=>unit==='g'||unit==='ml'?1000:1;
+export const priceUnit=(unit:string)=>unit==='g'?'kg':unit==='ml'?'L':unit;
+export const key=(name:string,unit:string,brand='')=>normalized(name).replaceAll('|','%7C')+'|'+baseUnit(unit)+(brand.trim()?'|brand:'+encodeURIComponent(normalized(brand)):'');
 export const dateString=(d:Date)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 export const today=()=>dateString(new Date());
 export const monday=(s=today())=>{const d=new Date(s+'T12:00:00');d.setDate(d.getDate()-((d.getDay()+6)%7));return dateString(d)};
 export const addDays=(s:string,n:number)=>{const d=new Date(s+'T12:00:00');d.setDate(d.getDate()+n);return dateString(d)};
-export function priceOf(i:Ingredient,d:Data){return d.prices[key(i.name,i.unit)]?.price??i.price}
+export function historyFor(d:Data,name:string,unit:string,brand=''){return (d.priceHistory??[]).filter(p=>key(p.name,p.unit,p.brand)===key(name,unit,brand)).sort((a,b)=>a.date.localeCompare(b.date)||(a.recordedAt??'').localeCompare(b.recordedAt??''));}
+export function latestPrices(history:PriceEntry[]){const prices:Data['prices']={};for(const p of [...history].sort((a,b)=>a.date.localeCompare(b.date)||(a.recordedAt??'').localeCompare(b.recordedAt??''))){prices[key(p.name,p.unit,p.brand)]={price:p.price/unitFactor(p.unit),date:p.date}}return prices}
+export function withHistory(d:Data,history:PriceEntry[]):Data{return {...d,priceHistory:history,prices:latestPrices(history)}}
+export function priceOf(i:Pick<Ingredient,'name'|'unit'|'brand'|'price'>,d:Data){const p=d.prices[key(i.name,i.unit,i.brand)];return p?p.price*unitFactor(i.unit):i.price}
 export function cost(r:Recipe,d:Data){return r.ingredients.reduce((sum,i)=>sum+i.qty*priceOf(i,d),0)}
-export function shopping(d:Data,start:string){const out:Record<string,Ingredient>={};d.plans.filter(p=>p.date>=start&&p.date<=addDays(start,6)).forEach(p=>{const r=d.recipes.find(r=>r.id===p.recipeId);r?.ingredients.forEach(i=>{const k=key(i.name,i.unit);if(!out[k])out[k]={...i,qty:0,price:priceOf(i,d)};out[k].qty+=i.qty*p.servings/r.servings})});d.extras.filter(e=>e.id.startsWith(start)).forEach(e=>{const k=key(e.name,e.unit);if(!out[k])out[k]={...e,qty:0,category:'Autres'};out[k].qty+=e.qty});return Object.entries(out)}
+export const ingredientId=(r:Recipe,i:Ingredient,index:number)=>i.id??`${r.id}-ingredient-${index}`;
+export function shopping(d:Data,start:string){const out:Record<string,Ingredient>={};d.plans.filter(p=>p.date>=start&&p.date<=addDays(start,6)).forEach(p=>{const r=d.recipes.find(r=>r.id===p.recipeId);r?.ingredients.forEach((i,index)=>{if(p.ingredientIds&&!p.ingredientIds.includes(ingredientId(r,i,index)))return;const k=key(i.name,i.unit,i.brand);if(!out[k])out[k]={...i,unit:baseUnit(i.unit),qty:0,price:priceOf(i,d)/unitFactor(i.unit)};out[k].qty+=i.qty*unitFactor(i.unit)*p.servings/r.servings})});d.extras.filter(e=>e.id.startsWith(start)).forEach(e=>{const k=key(e.name,e.unit);if(!out[k])out[k]={...e,unit:baseUnit(e.unit),qty:0,price:priceOf(e,d)/unitFactor(e.unit),category:'Autres'};out[k].qty+=e.qty*unitFactor(e.unit)});return Object.entries(out)}
+export function catalog(d:Data):Ingredient[]{const entries=new Map<string,Ingredient>();for(const r of d.recipes)for(const i of r.ingredients){const k=key(i.name,i.unit,i.brand);if(!entries.has(k))entries.set(k,{...i,unit:baseUnit(i.unit),qty:1,price:i.price/unitFactor(i.unit)})}for(const f of d.foods??[]){const k=key(f.name,f.unit,f.brand);entries.set(k,{...entries.get(k),...f,unit:baseUnit(f.unit),qty:1,price:entries.get(k)?.price??0})}for(const p of d.priceHistory??[]){const k=key(p.name,p.unit,p.brand);if(!entries.has(k))entries.set(k,{...p,unit:baseUnit(p.unit),qty:1,price:p.price/unitFactor(p.unit),category:'Autres'})}return [...entries.values()].sort((a,b)=>a.name.localeCompare(b.name,'fr')||(a.brand??'').localeCompare(b.brand??'','fr'))}
+export function receiptEntries(r:Receipt):PriceEntry[]{return r.lines.filter(l=>l.name.trim()&&l.qty>0).map((l,index)=>({id:`receipt:${r.id}:${index}`,name:l.name.trim(),brand:l.brand?.trim()||'',unit:l.unit,price:l.total/l.qty,date:r.date,source:'receipt',receiptId:r.id,recordedAt:r.date+'T00:00:00.000Z'}))}
+export function withReceipt(d:Data,r:Receipt):Data{return withHistory({...d,receipts:[r,...d.receipts.filter(x=>x.id!==r.id)]},[...d.priceHistory.filter(p=>p.receiptId!==r.id),...receiptEntries(r).map(p=>({...p,recordedAt:new Date().toISOString()}))])}
+export function normalizeData(raw:Data):Data{
+ const migrated=raw.priceHistory===undefined;
+ let history=raw.priceHistory??raw.receipts.flatMap(receiptEntries);
+ if(migrated)for(const [k,p]of Object.entries(raw.prices??{})){const [name,unit,brandPart]=k.split('|');if(!UNITS.includes(unit))continue;const brand=brandPart?.startsWith('brand:')?decodeURIComponent(brandPart.slice(6)):'';if(!history.some(e=>key(e.name,e.unit,e.brand)===key(name,unit,brand)&&e.date===p.date&&Math.abs(e.price/unitFactor(e.unit)-p.price)<1e-9))history.push({id:'legacy:'+k,name,brand,unit,price:p.price,date:p.date,source:'legacy'});}
+ const d={...raw,foods:raw.foods??[],priceHistory:history,recipes:raw.recipes.map(r=>({...r,ingredients:r.ingredients.map((i,index)=>({...i,id:ingredientId(r,i,index),brand:i.brand??''}))})),plans:raw.plans.map(p=>({...p,meal:p.meal??'dinner'}))};
+ return migrated?withHistory(d,history):d;
+}
 const winter=[1,2,3,10,11,12],summer=[6,7,8,9],autumn=[9,10,11,12];
 function ing(name:string,qty:number,unit:string,price:number,category:string,vegetable=false):Ingredient{return {name,qty,unit,price,category,vegetable}}
 const v=(name:string,qty:number,price:number)=>ing(name,qty,'g',price,'Légumes',true);
@@ -32,4 +57,4 @@ const raw=[
  ['Couscous aux légumes d’été','Coloré, généreux, et prêt en peu de temps.','Végétarien',summer,20,4,'Une cocotte','🫑','#e9cdbb',[g('Semoule',250,.0025),v('Courgettes',400,.0025),v('Poivrons',300,.004),v('Tomates',400,.003),g('Pois chiches égouttés',400,.003),g('Ras-el-hanout',8,.025)],'Faire revenir les légumes en dés avec les épices. Ajouter les pois chiches et 250 ml d’eau, mijoter 15 minutes.\nVerser la semoule, couper le feu et couvrir 5 minutes. Ajouter un peu d’eau chaude si nécessaire.\nÉgrener à la fourchette et assaisonner.'],
  ['Porc, carottes & champignons','Une poêlée toute simple à partager.','Viande',autumn,20,4,'Une grande sauteuse','🍽️','#dbd2c4',[g('Émincé de porc',500,.01,'Viande & poisson'),v('Carottes',500,.0015),v('Champignons',300,.005),g('Riz précuit',500,.004),ml('Crème',150,.004)],'Émincer finement les carottes et les cuire à couvert avec un fond d’eau 10 minutes.\nAjouter les champignons et faire dorer. Réserver sur le côté de la sauteuse, cuire le porc jusqu’à cuisson complète.\nAjouter la crème et le riz précuit, réchauffer selon le paquet.']
 ];
-export function initialData():Data{return {recipes:raw.map((r,i)=>({id:'recipe-'+i,name:r[0],description:r[1],type:r[2],months:r[3],minutes:r[4],servings:r[5],utensils:r[6],emoji:r[7],color:r[8],ingredients:r[9],steps:r[10],favorite:i<3} as Recipe)),plans:[],receipts:[],checked:{},extras:[],budget:80,prices:{}}}
+export function initialData():Data{return normalizeData({recipes:raw.map((r,i)=>({id:'recipe-'+i,name:r[0],description:r[1],type:r[2],months:r[3],minutes:r[4],cookingMinutes:[55,15,30,50,25,40,15,45,15,45,20,20][i],servings:r[5],utensils:r[6],emoji:r[7],color:r[8],ingredients:r[9],steps:r[10],favorite:i<3} as Recipe)),plans:[],receipts:[],checked:{},extras:[],budget:80,prices:{},foods:[],priceHistory:[]})}
