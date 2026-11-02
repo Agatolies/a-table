@@ -1,0 +1,28 @@
+name: a-table
+services:
+  app:
+    image: ${ATABLE_IMAGE:-ghcr.io/agatolies/a-table:latest}
+    build: .
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${HTTP_PORT:-8080}:3000"
+    environment:
+      PUBLIC_URL: ${PUBLIC_URL:?Définir PUBLIC_URL dans .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Définir ADMIN_PASSWORD dans .env}
+      SESSION_SECRET: ${SESSION_SECRET:?Définir SESSION_SECRET dans .env}
+      DATA_DIR: /data
+      TZ: Europe/Brussels
+    volumes:
+      - a-table-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 15s
+volumes:
+  a-table-data:
+    name: a-table-data
