@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {initialData,cost,shopping,key,monday,addDays} from '../src/model.ts';
+const d=initialData();const r=d.recipes[0];
+assert.equal(cost(r,d),8.16);
+d.plans=[{id:'1',recipeId:r.id,date:'2026-11-02',servings:2},{id:'2',recipeId:r.id,date:'2026-11-03',servings:2},{id:'3',recipeId:r.id,date:'2026-11-09',servings:4}];
+const basket=shopping(d,'2026-11-02');
+assert.equal(basket.length,5);
+assert.equal(basket.find(([,i])=>i.name==='Poireaux')[1].qty,600);
+assert.equal(basket.reduce((s,[,i])=>s+i.qty*i.price,0),8.16);
+d.prices[key('Poireaux','g')]={price:3/1000,date:'2026-11-02'};
+assert.ok(Math.abs(cost(r,d)-8.46)<.0001);
+assert.equal(shopping(d,'2026-11-02').find(([,i])=>i.name==='Poireaux')[1].price,.003);
+assert.equal(monday('2026-11-08'),'2026-11-02');
+assert.equal(addDays('2026-12-31',1),'2027-01-01');
+console.log('Verified: portions, repeated meals, week boundaries, ingredient totals and receipt price overrides.');
