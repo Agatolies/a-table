@@ -4,26 +4,42 @@ Un carnet de recettes de saison pour décider plus facilement quoi manger, prép
 
 ## Ce que fait l’application
 
-- **Recettes** : création et modification, favoris, recherche par ingrédient, mois et saisons en Belgique, végétarien/poisson/viande, temps de préparation et matériel utilisé.
-- **Menus** : planning hebdomadaire, portions ajustables, proposition de cinq soirs et repas répétés pour cuisiner en plus grandes quantités.
+- **Recettes** : création et modification, favoris, recherche par ingrédient, mois et saisons en Belgique, végétarien/poisson/viande, temps de préparation et de cuisson séparés, marques facultatives et matériel utilisé.
+- **Menus** : planning hebdomadaire avec petit déjeuner/déjeuner/dîner, portions ajustables, choix des ingrédients à acheter, proposition de cinq soirs et repas répétés pour cuisiner en plus grandes quantités.
 - **Courses** : ingrédients regroupés par nom et unité, classement par rayon, cases à cocher, extras et impression.
 - **Budget** : coût estimé par portion et par menu, repère hebdomadaire, historique des dépenses par mois.
-- **Tickets** : photos JPG/PNG/WebP ou PDF jusqu’à 8 Mo, montant total et saisie facultative des articles. Les prix relevés peuvent actualiser toutes les recettes utilisant le même nom et la même unité.
+- **Tickets** : photos JPG/PNG/WebP ou PDF jusqu’à 8 Mo, montant total et saisie facultative des articles. Les prix relevés alimentent automatiquement l’historique et actualisent les recettes utilisant le même aliment et la même marque.
 - **Sauvegarde** : export/import JSON du carnet et stockage persistant des pièces jointes sur le serveur.
 
 Douze recettes de départ sont fournies. Les prix initiaux sont **des exemples indicatifs**, pas des relevés de magasin. Les mois peuvent être modifiés selon les légumes principaux et leur origine. Repères : [calendrier Apaq-W / Biowallonie](https://www.apaqw.be/fr/calendrier-des-fruits-et-legumes-de-saison-en-wallonie).
 
 **Limites actuelles** : saisie manuelle des tickets, sans OCR ; un carnet partagé et un mot de passe pour le foyer ; pas de comptes individuels ; les prix portent sur les quantités utilisées, sans arrondi aux conditionnements. Les pièces jointes ne sont pas incluses dans l’export JSON.
 
-## Créer le dépôt depuis cette archive
+## Nouveautés : aliments, prix et repas
 
-Si le projet n’a pas encore été publié : installer Git et [GitHub CLI](https://cli.github.com/), se connecter au compte **Agatolies** avec `gh auth login`, puis lancer depuis le dossier extrait :
+### Configurer les aliments et suivre les prix
 
-```bash
-bash scripts/publish-github.sh
-```
+La page **Prix des aliments** rassemble les ingrédients des recettes, les aliments ajoutés manuellement et ceux des tickets détaillés. Rechercher un aliment ou une marque, puis saisir une **quantité de référence**, son **prix total** et la **date du relevé**. Exemple : 1 000 g de carottes pour 1,49 €. Un nouvel aliment peut être créé sans recette associée.
 
-Le script vérifie le compte actif, crée **Agatolies/a-table en privé**, pousse le code et déclenche la CI. Il refuse de modifier un dépôt distant déjà existant. Ce script n’a pas été exécuté tant que l’accès au compte Agatolies n’est pas disponible.
+Chaque saisie ajoute un point à l’historique. Le graphique et le tableau présentent les relevés par date (puis par ordre de saisie le même jour). Les montants sont ramenés au kilo, au litre ou à la pièce pour être comparables. Les estimations initiales des recettes ne créent pas de faux points dans l’historique. Les relevés manuels peuvent être corrigés ou supprimés ; le prix précédent prend alors le relais.
+
+Les articles détaillés d’un ticket alimentent désormais **automatiquement** cet historique à l’enregistrement. Corriger le ticket remplace ses relevés, sans les dupliquer. Les prix relevés restent disponibles si le ticket est supprimé. Les anciennes références de prix sont reprises lors de l’ouverture du carnet. Le prix daté le plus récent est utilisé pour les estimations ; un relevé ancien saisi plus tard n’écrase pas un relevé plus récent.
+
+La **marque**, facultative, distingue les références d’un même aliment. Une marque différente ou un aliment sans marque possède son propre historique et son propre prix. Le nom et la marque sont comparés sans tenir compte des majuscules ou des espaces en début et fin.
+
+Unités disponibles : **g, ml, pièce, càc, càs**. Les cuillères sont des mesures de volume : **1 càc = 5 ml**, **1 càs = 15 ml**. Les volumes sont regroupés en ml dans les courses. Aucune conversion automatique entre grammes et cuillères n’est effectuée, car elle dépend de l’aliment. Un changement d’unité entre volume et poids remet la quantité et le prix estimé à saisir.
+
+### Préparation et cuisson
+
+Chaque recette distingue le **temps de préparation** du **temps de cuisson**. Les deux sont visibles sur la fiche et dans le carnet ; le planning les rappelle également. Une cuisson de 0 minute représente une recette sans cuisson. Les anciennes recettes sans cette information affichent « Cuisson à préciser » : aucun temps n’est inventé lors de la reprise des données.
+
+### Petit déjeuner, déjeuner et dîner
+
+Chaque journée possède trois créneaux. Dans **On la met au menu ?**, choisir la date, le repas, les portions et les ingrédients à ajouter aux courses : **Tous**, **Aucun**, ou cocher les ingrédients un à un. Les quantités se recalculent selon les portions. Le bouton **Modifier** du planning permet de revenir sur la date, le repas et la sélection.
+
+Un nouveau plat remplace celui du même créneau après indication explicite dans la fenêtre. La proposition de cinq soirs remplit uniquement les dîners libres. Pour un repas de restes déjà cuisinés, choisir **Aucun** afin de ne pas compter deux fois les ingrédients. Le coût du menu correspond au plat complet ; le montant restant à acheter dépend des ingrédients sélectionnés et des cases déjà cochées dans les courses.
+
+**Reprise des données existantes** : les anciens repas sont classés au dîner et continuent d’inclure tous leurs ingrédients. Les recettes, tickets et prix sont conservés. Aucune recréation du volume Docker n’est nécessaire.
 
 ## Déployer avec Docker Compose
 
@@ -119,7 +135,7 @@ Dans l’ancienne application : **Mon carnet & sauvegarde → Exporter le carnet
 Le workflow `.github/workflows/ci.yaml` :
 
 1. Installe les dépendances verrouillées avec Node.js 24 et `npm ci`.
-2. Vérifie les calculs, l’authentification, la persistance, les conflits de sauvegarde et les pièces jointes.
+2. Vérifie les calculs, les trois repas, les sélections d’ingrédients, les marques, les conversions de cuillères, les historiques de prix et la reprise des données, puis l’authentification, la persistance, les conflits de sauvegarde et les pièces jointes.
 3. Vérifie TypeScript et compile le frontend.
 4. Construit un conteneur AMD64 et vérifie sa santé, la page de connexion et le refus des accès anonymes.
 5. Sur `main`, les tags `v*` ou un lancement manuel, publie l’image AMD64/ARM64 sur GHCR avec provenance et SBOM. Les pull requests ne publient rien.
